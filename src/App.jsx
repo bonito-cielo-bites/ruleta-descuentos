@@ -5,9 +5,6 @@ import React, { useState, useEffect, useRef } from "react";
 //  Captura de datos (nombre + teléfono) y descuento aleatorio
 // ─────────────────────────────────────────────────────────────
 
-const STORE_KEY = "bonitocielo_leads_v1";
-const ADMIN_PIN = "2468"; // ← cámbialo por tu PIN privado
-
 // Premios en sentido horario desde arriba. "weight" controla la
 // probabilidad (mayor = sale más seguido) para cuidar tu margen.
 const PRIZES = [
@@ -146,23 +143,6 @@ const CSS = `
 .bc-conf{ position:absolute; top:-12px; width:9px; height:14px; border-radius:2px; animation:fall linear forwards; }
 @keyframes fall{ to{ transform:translateY(108vh) rotate(720deg); opacity:.2; } }
 
-/* ADMIN */
-.bc-admindot{ position:fixed; bottom:12px; right:12px; z-index:20; width:30px; height:30px; border-radius:50%;
-  border:1px solid rgba(255,255,255,.18); background:rgba(255,255,255,.06); color:#8d86b0; cursor:pointer; font-size:13px; }
-.bc-overlay{ position:fixed; inset:0; z-index:40; background:rgba(10,8,28,.82); backdrop-filter:blur(6px);
-  display:flex; align-items:center; justify-content:center; padding:18px; animation:rise .3s both; }
-.bc-modal{ width:100%; max-width:560px; max-height:88vh; overflow:auto; background:#1a1640;
-  border:1px solid rgba(255,255,255,.14); border-radius:22px; padding:22px; }
-.bc-row{ display:flex; justify-content:space-between; align-items:center; gap:10px; }
-.bc-stat{ display:flex; gap:10px; flex-wrap:wrap; margin:16px 0; }
-.bc-pill{ background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.12); border-radius:12px; padding:10px 13px; flex:1; min-width:90px; }
-.bc-pill .v{ font-family:'Fraunces',serif; font-size:26px; font-weight:700; color:#F4C879; }
-.bc-pill .k{ font-size:11px; color:#b8b0dc; text-transform:uppercase; letter-spacing:.05em; }
-.bc-table{ width:100%; border-collapse:collapse; font-size:13px; margin-top:6px; }
-.bc-table th{ text-align:left; color:#b8b0dc; font-size:11px; text-transform:uppercase; letter-spacing:.04em; padding:8px 6px; border-bottom:1px solid rgba(255,255,255,.12); }
-.bc-table td{ padding:9px 6px; border-bottom:1px solid rgba(255,255,255,.06); color:#e7e2f7; }
-.bc-mini{ font-size:13px; font-weight:700; padding:9px 14px; border-radius:11px; border:none; cursor:pointer; }
-.bc-empty{ text-align:center; color:#8d86b0; padding:30px 0; font-size:14px; }
 `;
 
 function segPath(cx, cy, r, startDeg, endDeg) {
@@ -199,23 +179,10 @@ export default function App() {
     const [rotation, setRotation] = useState(0);
     const [spinning, setSpinning] = useState(false);
     const [result, setResult] = useState(null);
-    const [leads, setLeads] = useState([]);
-    const [loading, setLoading] = useState(true);
     const [showConf, setShowConf] = useState(false);
-
-    const [adminOpen, setAdminOpen] = useState(false);
-    const [authed, setAuthed] = useState(false);
-    const [pin, setPin] = useState("");
-    const [confirmClear, setConfirmClear] = useState(false);
 
     const finalIdx = useRef(0);
     const finalCode = useRef("");
-
-    useEffect(() => {
-        const saved = localStorage.getItem(STORE_KEY);
-        if (saved) setLeads(JSON.parse(saved));
-        setLoading(false);
-    }, []);
 
     const cleanPhone = form.phone.replace(/\D/g, "");
     const phoneOk = /^3\d{9}$/.test(cleanPhone);
@@ -248,17 +215,7 @@ export default function App() {
         setSpinning(false);
         const prize = PRIZES[finalIdx.current];
         const isWin = prize.type === "pct";
-        const lead = {
-            name: form.name.trim(),
-            phone: "+57" + cleanPhone,
-            prize: isWin ? prize.value + "% dcto" : "Casi ganas",
-            code: isWin ? finalCode.current : "—",
-            date: new Date().toISOString(),
-        };
         setResult({ prize, code: finalCode.current });
-        const next = [lead, ...leads];
-        setLeads(next);
-        localStorage.setItem(STORE_KEY, JSON.stringify(next));
         if (isWin) {
             setShowConf(true);
             setTimeout(() => setShowConf(false), 2600);
@@ -272,29 +229,6 @@ export default function App() {
         setResult(null);
         setScreen("entry");
     }
-
-    function exportCSV() {
-        const head = ["Nombre", "Telefono", "Premio", "Codigo", "Fecha"];
-        const rows = leads.map((l) => [l.name, l.phone, l.prize, l.code,
-        new Date(l.date).toLocaleString("es-CO")]);
-        const csv = "\ufeff" + [head, ...rows]
-            .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
-            .join("\n");
-        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url; a.download = "clientes_bonito_cielo.csv"; a.click();
-        URL.revokeObjectURL(url);
-    }
-
-    function clearAll() {
-        setLeads([]);
-        localStorage.removeItem(STORE_KEY);
-        setConfirmClear(false);
-    }
-
-    const prizeCounts = {};
-    leads.forEach((l) => { prizeCounts[l.prize] = (prizeCounts[l.prize] || 0) + 1; });
 
     return (
         <div className="bc-root">
@@ -454,71 +388,6 @@ export default function App() {
                 )}
             </div>
 
-            {/* ADMIN ACCESS */}
-            <button className="bc-admindot" title="Panel"
-                onClick={() => { setAdminOpen(true); setAuthed(false); setPin(""); }}>⚙</button>
-
-            {adminOpen && (
-                <div className="bc-overlay" onClick={(e) => { if (e.target === e.currentTarget) setAdminOpen(false); }}>
-                    <div className="bc-modal">
-                        {!authed ? (
-                            <>
-                                <div className="bc-row">
-                                    <div className="bc-h2" style={{ fontSize: 20 }}>Panel del stand</div>
-                                    <button className="bc-mini" style={{ background: "rgba(255,255,255,.1)", color: "#fff" }} onClick={() => setAdminOpen(false)}>Cerrar</button>
-                                </div>
-                                <div className="bc-sub" style={{ marginTop: 10 }}>Ingresa el PIN para ver los clientes registrados.</div>
-                                <input className="bc-input" style={{ marginTop: 14 }} type="password" inputMode="numeric"
-                                    placeholder="PIN" value={pin} onChange={(e) => setPin(e.target.value)} />
-                                <button className="bc-btn" onClick={() => { if (pin === ADMIN_PIN) setAuthed(true); }}>Entrar</button>
-                                {pin && pin !== ADMIN_PIN && <div className="bc-err">PIN incorrecto.</div>}
-                            </>
-                        ) : (
-                            <>
-                                <div className="bc-row">
-                                    <div className="bc-h2" style={{ fontSize: 20 }}>Clientes registrados</div>
-                                    <button className="bc-mini" style={{ background: "rgba(255,255,255,.1)", color: "#fff" }} onClick={() => setAdminOpen(false)}>Cerrar</button>
-                                </div>
-
-                                <div className="bc-stat">
-                                    <div className="bc-pill"><div className="v">{leads.length}</div><div className="k">Clientes</div></div>
-                                    {Object.entries(prizeCounts).slice(0, 3).map(([k, v]) => (
-                                        <div className="bc-pill" key={k}><div className="v">{v}</div><div className="k">{k}</div></div>
-                                    ))}
-                                </div>
-
-                                <div className="bc-row" style={{ marginBottom: 10 }}>
-                                    <button className="bc-mini" style={{ background: "linear-gradient(135deg,#F4C879,#E3A964)", color: "#1B1840" }}
-                                        onClick={exportCSV} disabled={!leads.length}>↓ Exportar CSV</button>
-                                    {!confirmClear ? (
-                                        <button className="bc-mini" style={{ background: "rgba(199,107,122,.25)", color: "#ffb3c0" }}
-                                            onClick={() => setConfirmClear(true)} disabled={!leads.length}>Borrar todo</button>
-                                    ) : (
-                                        <span style={{ display: "flex", gap: 6 }}>
-                                            <button className="bc-mini" style={{ background: "#C76B7A", color: "#fff" }} onClick={clearAll}>Confirmar</button>
-                                            <button className="bc-mini" style={{ background: "rgba(255,255,255,.1)", color: "#fff" }} onClick={() => setConfirmClear(false)}>Cancelar</button>
-                                        </span>
-                                    )}
-                                </div>
-
-                                {loading ? <div className="bc-empty">Cargando…</div> :
-                                    leads.length === 0 ? <div className="bc-empty">Aún no hay clientes registrados.</div> : (
-                                        <table className="bc-table">
-                                            <thead><tr><th>Nombre</th><th>Celular</th><th>Premio</th><th>Código</th></tr></thead>
-                                            <tbody>
-                                                {leads.map((l, i) => (
-                                                    <tr key={i}>
-                                                        <td>{l.name}</td><td>{l.phone}</td><td>{l.prize}</td><td>{l.code}</td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    )}
-                            </>
-                        )}
-                    </div>
-                </div>
-            )}
         </div>
     );
 }

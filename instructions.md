@@ -101,7 +101,7 @@ https://ruleta-descuentos.vercel.app
 
 ### 3.4 Dominio personalizado (opcional) (Human)
 
-En Vercel → tu proyecto → **Settings → Domains**, puedes agregar un dominio propio como `ruleta.bonitocielo.co`. Solo necesitas apuntar el DNS de tu dominio al servidor de Vercel siguiendo sus instrucciones.
+En Vercel → tu proyecto → **Settings → Domains**, puedes agregar un dominio propio como `ruleta.bonitocielo.com`. Solo necesitas apuntar el DNS de tu dominio al servidor de Vercel siguiendo sus instrucciones.
 
 ---
 
