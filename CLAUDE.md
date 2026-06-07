@@ -14,46 +14,56 @@ No test suite exists. Verify changes visually with `pnpm dev`.
 
 ## Architecture
 
-This is a **single-file React app** (`src/App.jsx`) — all logic, styles, and UI live there. There are no separate components, routes, or state management libraries.
+This is a **single-file React app** (`src/App.jsx`) — all logic, styles, and UI live there. No separate components, routes, or state management libraries.
 
 ### Screens
 
-The app cycles through three screens controlled by a `screen` state variable:
+Controlled by a `screen` state variable:
 
 ```
 "entry"  →  "wheel"  →  "result"
 ```
 
-- `entry`: captures name, phone (+57 prefix), and consent checkbox
-- `wheel`: renders the SVG spinner; spin triggered by hub button or `¡Girar la ruleta!` button
-- `result`: shows the prize won or "Casi ganas" (lose)
+- `entry`: captures name, last name, phone (+57 prefix), consent checkbox
+- `wheel`: SVG spinner; spin triggered by hub button or `¡Girar la ruleta!` button
+- `result`: shows prize (`pct`), loss (`lose`), or duplicate phone (`duplicate`)
 
-An admin panel (⚙ button, fixed bottom-right) sits outside this flow, protected by `ADMIN_PIN`.
+### Spin flow
 
-### Key constants to customize
+`spin()` → `finishSpin()` (via `onTransitionEnd` on the SVG after 5.2 s CSS transition)
+
+Key detail: the Google Sheets fetch is **started in `spin()`** (runs in parallel with the animation) and **awaited in `finishSpin()`** inside a 650 ms `setTimeout`. By then the network call is almost always resolved, so the duplicate check adds no perceptible delay. The result (`pct`/`lose`/`duplicate`) is set inside that setTimeout, and confetti only fires for non-duplicate wins.
+
+`spinning` stays `true` from `spin()` until `setSpinning(false)` inside the 650 ms callback — buttons remain disabled through the entire post-spin transition.
+
+### Key constants
 
 | Constant | Location | Purpose |
 |---|---|---|
-| `PRIZES` | top of App.jsx | Segments: label, type (`pct`/`lose`), value, `weight` (higher = more frequent), colors |
-| `const CSS` | top of App.jsx (template literal) | All visual styles — color palette, fonts, animations |
+| `PRIZES` | top of App.jsx | Segments: label, type (`pct`/`lose`), value, `weight`, colors |
+| `SHEETS_URL` | top of App.jsx | Google Apps Script web app URL |
+| `const CSS` | top of App.jsx (template literal) | All styles — BEM-like `bc-` prefix |
 
-### Prize probability
-
-`weightedPick()` selects a prize proportionally by `weight`. Increasing a segment's weight makes it land more often. Total weights don't need to sum to any specific number.
-
-### Data storage
-
-Leads are sent to Google Sheets via a Google Apps Script webhook — see `instructions.md §5` for setup. There is no local persistence or admin panel.
-
-### Styles
-
-All CSS lives in the `const CSS` template literal injected via `<style>{CSS}</style>`. BEM-like class names prefixed with `bc-`. To retheme, replace hex values in that block — see `instructions.md` section 6 for the color role mapping.
+`weightedPick()` selects a prize proportionally by `weight`. Total weights don't need to sum to any specific number.
 
 ### Google Sheets integration
 
-`instructions.md` section 5 describes adding a `SHEETS_URL` constant and modifying `finishSpin` to POST leads to a Google Apps Script webhook. This is not wired up yet — `finishSpin` computes the result but does not persist it anywhere until Sheets is connected.
+**React side** (`src/App.jsx`): `fetch()` with `mode: "cors"` and `Content-Type: "text/plain"` (avoids CORS preflight while allowing response reading). Sends `{ nombre, apellido, telefono, premio, codigo, fecha }`. Falls back to `localStorage` under key `bc_leads`.
+
+**Apps Script side** (`src/app-script.js`): paste into Google Apps Script, set `SHEET_ID` and `SHEET_NAME`, deploy as web app (access: Anyone). Behavior:
+- Uses `LockService` to serialize concurrent writes
+- Deduplicates by phone (column C), normalizing to digits only
+- Returns `{ status: "duplicate" }` if phone already exists — no update
+- Returns `{ status: "ok" }` on insert
+- `sanitize()` prefixes formula-triggering characters (`=`, `+`, `-`, `@`) with `'` to prevent spreadsheet injection
+
+After any change to `app-script.js`, a **new deployment** must be created in Apps Script and the new URL updated in `SHEETS_URL`.
+
+### Styles
+
+All CSS in the `const CSS` template literal, injected via `<style>{CSS}</style>`. To retheme, replace hex values in that block. The color roles are: `#e24c04` (accent/CTA), `#5879d8` (blue), `#2a1f3d` (dark text), `#f5e4ee` (background).
 
 ## Notes
 
-- `ruleta.jsx` at the repo root is the original source file. `src/App.jsx` is the working copy with `window.storage` replaced by `localStorage`.
+- `ruleta.jsx` at the repo root is the original source artifact — do not edit it.
 - `pnpm.onlyBuiltDependencies: ["esbuild"]` in `package.json` is required for pnpm to build esbuild's native binaries without interactive prompts.

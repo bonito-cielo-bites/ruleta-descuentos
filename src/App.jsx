@@ -16,6 +16,8 @@ const SEG = 360 / PRIZES.length;
 const INSTAGRAM_URL = "https://www.instagram.com/bonitocielo__";
 const WA_NUMBER = "5723476636";
 
+const SHEETS_URL = "https://script.google.com/macros/s/AKfycbyjIejehKj5ENzOTBmblw8pvQjX9FYLn3mjQK522gV4GTISxuYxOnUseT40s5oRgBph/exec";
+
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@400;500;600;700;800&display=swap');
 
@@ -232,6 +234,7 @@ export default function App() {
 
     const finalIdx = useRef(0);
     const finalCode = useRef("");
+    const pendingRef = useRef(null);
 
     const cleanPhone = form.phone.replace(/\D/g, "");
     const phoneOk = /^3\d{9}$/.test(cleanPhone);
@@ -250,6 +253,29 @@ export default function App() {
         const idx = weightedPick();
         finalIdx.current = idx;
         finalCode.current = genCode();
+
+        const prize = PRIZES[idx];
+        const isWin = prize.type === "pct";
+        const lead = {
+            nombre: form.name.trim(),
+            apellido: form.lastName.trim(),
+            telefono: "+57" + cleanPhone,
+            premio: isWin ? prize.value + "% dcto" : "Casi ganas",
+            codigo: isWin ? finalCode.current : "—",
+            fecha: new Date().toLocaleString("es-CO"),
+        };
+
+        const existing = JSON.parse(localStorage.getItem("bc_leads") || "[]");
+        localStorage.setItem("bc_leads", JSON.stringify([lead, ...existing]));
+
+        // Lanzar el fetch en paralelo con la animación (5.2 s dan tiempo suficiente)
+        pendingRef.current = fetch(SHEETS_URL, {
+            method: "POST",
+            mode: "cors",
+            headers: { "Content-Type": "text/plain" },
+            body: JSON.stringify(lead),
+        }).then(r => r.json()).catch(() => null);
+
         const spins = 5 + Math.floor(Math.random() * 3);
         const jitter = Math.random() * 30 - 15;
         const targetMod = (((360 - (idx * SEG + SEG / 2) + jitter) % 360) + 360) % 360;
@@ -262,15 +288,21 @@ export default function App() {
 
     function finishSpin() {
         if (!spinning) return;
-        setSpinning(false);
+
         const prize = PRIZES[finalIdx.current];
-        const isWin = prize.type === "pct";
         setResult({ prize, code: finalCode.current });
-        if (isWin) {
-            setShowConf(true);
-            setTimeout(() => setShowConf(false), 2600);
-        }
-        setTimeout(() => setScreen("result"), 650);
+
+        setTimeout(async () => {
+            const response = await pendingRef.current;
+            if (response?.status === "duplicate") {
+                setResult({ prize: { type: "duplicate" }, code: "" });
+            } else if (prize.type === "pct") {
+                setShowConf(true);
+                setTimeout(() => setShowConf(false), 2600);
+            }
+            setSpinning(false);
+            setScreen("result");
+        }, 650);
     }
 
     return (
@@ -423,7 +455,13 @@ export default function App() {
                 {/* RESULT */}
                 {screen === "result" && result && (
                     <div className="bc-panel" style={{ textAlign: "center" }}>
-                        {result.prize.type === "lose" ? (
+                        {result.prize.type === "duplicate" ? (
+                            <>
+                                <div className="bc-kicker" style={{ color: "#8b7aac" }}>¡Hola, {form.name.split(" ")[0]}!</div>
+                                <div className="bc-prizebig" style={{ fontSize: 38, marginTop: 12, lineHeight: 1.1 }}>Ya participaste</div>
+                                <div className="bc-sub" style={{ marginTop: 12 }}>Tu número ya participo en la ruleta. Si tienes dudas, escríbenos por WhatsApp y te ayudamos.</div>
+                            </>
+                        ) : result.prize.type === "lose" ? (
                             <>
                                 <div className="bc-kicker" style={{ color: "#8b7aac" }}>¡Uy, {form.name.split(" ")[0]}!</div>
                                 <div className="bc-prizebig" style={{ fontSize: 44, marginTop: 12, lineHeight: 1.1 }}>¡Casi ganas!</div>
